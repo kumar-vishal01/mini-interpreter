@@ -16,4 +16,8 @@ public class Token {
     public String getValue() { return value;}
     public int getline() {return line;}
 
+    public String toString() {
+        return "Token(" + type + ", \"" + value + "\", line= " + line + " )";
+    }
+
 }

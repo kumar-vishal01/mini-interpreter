@@ -54,6 +54,17 @@ public class Tokenizer {
         return new Token(type, word, startLine);
     }
 
+    private Token readNumber() {
+        
+        int startLine = line;
+        StringBuilder sb = new StringBuilder();
+        while (pos < source.length() && (Character.isDigit(source.charAt(pos)) || source.charAt(pos) == '.')) {
+            sb.append(source.charAt(pos));
+            pos++;
+        }
+        return new Token(TokenType.NUMBER, sb.toString(), startLine);
+    }
+
 
 
     private TokenType keyword(String word){

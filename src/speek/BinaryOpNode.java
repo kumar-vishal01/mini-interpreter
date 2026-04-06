@@ -48,5 +48,23 @@ public class BinaryOpNode implements Expression {
             default:
                 throw new RuntimeException("Unknown operator: " + operator);
         }
+        
+    }
+    // ── Helpers ────────────────────────────────────────────────────────────
+
+    private double toDouble(Object val) {
+        if (val instanceof Double) return (Double) val;
+        throw new RuntimeException(
+            "Expected a number but got: " + val + " (" + val.getClass().getSimpleName() + ")");
+    }
+
+    private String stringify(Object val) {
+        if (val instanceof Double) {
+            double d = (Double) val;
+            // Print as integer when there is no fractional part
+            if (d == Math.floor(d) && !Double.isInfinite(d)) return String.valueOf((long) d);
+            return String.valueOf(d);
+        }
+        return String.valueOf(val);
     }
 }

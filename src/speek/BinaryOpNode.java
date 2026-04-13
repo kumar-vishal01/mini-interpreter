@@ -52,11 +52,7 @@ public class BinaryOpNode implements Expression {
     }
     // ── Helpers ────────────────────────────────────────────────────────────
 
-    private double toDouble(Object val) {
-        if (val instanceof Double) return (Double) val;
-        throw new RuntimeException(
-            "Expected a number but got: " + val + " (" + val.getClass().getSimpleName() + ")");
-    }
+    
 
     private String stringify(Object val) {
         if (val instanceof Double) {

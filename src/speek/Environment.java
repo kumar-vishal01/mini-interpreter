@@ -3,6 +3,10 @@ package speek;
 import java.util.HashMap;
 import java.util.Map;
 
+/**
+ * Environment — the variable store shared across all instructions during a run.
+ * Maps variable names to their current values (Double or String).
+ */
 public class Environment {
     // Maps variable name → its current value (Double or String)
     private final Map<String, Object> store = new HashMap<>();

@@ -2,19 +2,20 @@ package speek;
 
 import java.util.List;
 
-// ─────────────────────────────────────────────
-//  Instruction  — one executable statement
-// ─────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────
+//  Instruction  — one complete executable statement
+// ─────────────────────────────────────────────────────────────
 interface Instruction {
     void execute(Environment env);
 }
 
-// ─────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────
 //  AssignInstruction  — let x be <expr>
-// ─────────────────────────────────────────────
+//  Evaluates the expression and stores the result in the Environment.
+// ─────────────────────────────────────────────────────────────
 class AssignInstruction implements Instruction {
-    private final String name;        // variable name
-    private final Expression expr;    // value to assign
+    private final String name;       // variable name to assign to
+    private final Expression expr;   // expression that produces the value
 
     public AssignInstruction(String name, Expression expr) {
         this.name = name;
@@ -33,9 +34,12 @@ class AssignInstruction implements Instruction {
     }
 }
 
-// ─────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────
 //  PrintInstruction  — say <expr>
-// ─────────────────────────────────────────────
+//  Evaluates the expression and prints the result.
+//  Whole-number Doubles are printed without the trailing ".0"
+//  so that  say 16  prints  16  not  16.0.
+// ─────────────────────────────────────────────────────────────
 class PrintInstruction implements Instruction {
     private final Expression expr;
 
@@ -47,9 +51,9 @@ class PrintInstruction implements Instruction {
     public void execute(Environment env) {
         Object value = expr.evaluate(env);
 
-        // Print numbers without unnecessary ".0"  (16.0 → "16")
         if (value instanceof Double) {
             double d = (Double) value;
+            // Print as integer when there is no fractional part
             if (d == Math.floor(d) && !Double.isInfinite(d)) {
                 System.out.println((long) d);
             } else {
@@ -58,7 +62,6 @@ class PrintInstruction implements Instruction {
         } else {
             System.out.println(value);
         }
-
     }
 
     @Override
@@ -67,17 +70,18 @@ class PrintInstruction implements Instruction {
     }
 }
 
-// ─────────────────────────────────────────────
-//  IfInstruction  — if <condition> is greater than <expr> then
-//                     <body>
-// ─────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────
+//  IfInstruction  — if <condition> then
+//                       <body>
+//  Executes the body only when the condition evaluates to true.
+// ─────────────────────────────────────────────────────────────
 class IfInstruction implements Instruction {
     private final Expression condition;
     private final List<Instruction> body;
 
     public IfInstruction(Expression condition, List<Instruction> body) {
         this.condition = condition;
-        this.body = body;
+        this.body      = body;
     }
 
     @Override
@@ -93,31 +97,26 @@ class IfInstruction implements Instruction {
     @Override
     public String toString() {
         StringBuilder sb = new StringBuilder();
-
         sb.append("IfInstruction(").append(condition).append(")");
-
-        if (!body.isEmpty()) sb.append("\n");
-
-        for (int i = 0; i < body.size(); i++) {
-            sb.append("    ").append(body.get(i));
-            if (i != body.size() - 1) sb.append("\n");
+        for (Instruction instr : body) {
+            sb.append("\n    ").append(instr);
         }
-
         return sb.toString();
     }
 }
 
-// ─────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────
 //  RepeatInstruction  — repeat <count> times
-//                          <body>
-// ─────────────────────────────────────────────
+//                           <body>
+//  Runs the body exactly count times.
+// ─────────────────────────────────────────────────────────────
 class RepeatInstruction implements Instruction {
     private final int count;
     private final List<Instruction> body;
 
     public RepeatInstruction(int count, List<Instruction> body) {
         this.count = count;
-        this.body = body;
+        this.body  = body;
     }
 
     @Override
@@ -128,21 +127,14 @@ class RepeatInstruction implements Instruction {
             }
         }
     }
-    
 
     @Override
     public String toString() {
         StringBuilder sb = new StringBuilder();
-
         sb.append("RepeatInstruction(").append(count).append(")");
-
-        if (!body.isEmpty()) sb.append("\n");
-
-        for (int i = 0; i < body.size(); i++) {
-            sb.append("    ").append(body.get(i));
-            if (i != body.size() - 1) sb.append("\n");
+        for (Instruction instr : body) {
+            sb.append("\n    ").append(instr);
         }
-
         return sb.toString();
     }
 }

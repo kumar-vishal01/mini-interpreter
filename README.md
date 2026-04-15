@@ -32,6 +32,13 @@ java -cp out speek.Main src/samples/program1.speek
 ```
 *(Replace `program1.speek` with `program2.speek`, `program3.speek`, or `program4.speek` to run the other tests).*
 
+### 4. Run Your Own Custom Scripts
+You can easily write and execute your own SPEEK scripts! Simply create a file ending in `.speek` anywhere on your computer (for example, `mycode.speek`), write your code maintaining the standard indentation rules, and pass the path of your completely new file to the interpreter:
+
+```bash
+java -cp out speek.Main path/to/your/mycode.speek
+```
+
 ---
 
 ## 📂 Project Structure

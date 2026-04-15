@@ -1,27 +1,35 @@
 package speek;
 
 /**
- * Handles printing output to the screen.
- * SPEEK syntax:  say x   or   say "hello"
+ * PrintInstruction — say &lt;expr&gt;
+ * Evaluates the expression and prints the result.
+ * Whole-number Doubles are printed without the trailing ".0".
  */
 public class PrintInstruction implements Instruction {
-    private final Expression expression;
+    private final Expression expr;
 
-    public PrintInstruction(Expression expression) {
-        this.expression = expression;
+    public PrintInstruction(Expression expr) {
+        this.expr = expr;
     }
 
     @Override
     public void execute(Environment env) {
-        Object result = expression.evaluate(env);
-        // Print integers without a decimal point for cleaner output
-        if (result instanceof Double) {
-            double d = (Double) result;
+        Object value = expr.evaluate(env);
+
+        if (value instanceof Double) {
+            double d = (Double) value;
             if (d == Math.floor(d) && !Double.isInfinite(d)) {
                 System.out.println((long) d);
-                return;
+            } else {
+                System.out.println(d);
             }
+        } else {
+            System.out.println(value);
         }
-        System.out.println(result);
+    }
+
+    @Override
+    public String toString() {
+        return "PrintInstruction(" + expr + ")";
     }
 }

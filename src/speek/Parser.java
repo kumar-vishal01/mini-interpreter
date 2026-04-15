@@ -3,39 +3,41 @@ package speek;
 import java.util.ArrayList;
 import java.util.List;
 
+/**
+ * Parser — reads the List&lt;Token&gt; from the Tokenizer and builds a List&lt;Instruction&gt;.
+ *
+ * Operator precedence is enforced by the three-level call chain:
+ *   parseExpression()  handles + and -  (lowest priority)
+ *   parseTerm()        handles * and /  (higher priority)
+ *   parsePrimary()     handles a single value (highest priority)
+ *
+ * Nested blocks are supported using indentation (line numbers):
+ * body instructions must appear on lines strictly after the header line.
+ */
 public class Parser {
     private final List<Token> tokens;
-    private int current;   // index of the token we're looking at right now
+    private int current;
 
     public Parser(List<Token> tokens) {
-        this.tokens = tokens;
+        this.tokens  = tokens;
         this.current = 0;
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
-    //  Public entry point
-    // ─────────────────────────────────────────────────────────────────────────
+    // ── Public entry point ────────────────────────────────────────────────────
     public List<Instruction> parse() {
         List<Instruction> instructions = new ArrayList<>();
-
         while (!isAtEnd()) {
             skipNewlines();
             if (isAtEnd()) break;
-
             Instruction instr = parseInstruction();
-            if (instr != null) {
-                instructions.add(instr);
-            }
+            if (instr != null) instructions.add(instr);
         }
         return instructions;
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
-    //  Instruction dispatch — looks at the current token to decide what to parse
-    // ─────────────────────────────────────────────────────────────────────────
+    // ── Instruction dispatch ──────────────────────────────────────────────────
     private Instruction parseInstruction() {
         Token t = peek();
-
         switch (t.getType()) {
             case LET:    return parseLet();
             case SAY:    return parseSay();
@@ -43,25 +45,22 @@ public class Parser {
             case REPEAT: return parseRepeat();
             default:
                 throw new RuntimeException(
-                    "Unexpected token '" + t.getValue() + "' on line " + t.getLine());
+                    "Unexpected token '" + t.getValue() +
+                    "' (type " + t.getType() + ") on line " + t.getLine());
         }
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
-    //  let x be <expr>
-    // ─────────────────────────────────────────────────────────────────────────
+    // ── let <name> be <expr> ──────────────────────────────────────────────────
     private AssignInstruction parseLet() {
-        consume(TokenType.LET);                          // eat "let"
-        String name = consume(TokenType.IDENTIFIER).getValue();  // variable name
-        consume(TokenType.BE);                           // eat "be"
-        Expression expr = parseExpression();             // right-hand side
+        consume(TokenType.LET);
+        String name = consume(TokenType.IDENTIFIER).getValue();
+        consume(TokenType.BE);
+        Expression expr = parseExpression();
         expectNewlineOrEOF();
         return new AssignInstruction(name, expr);
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
-    //  say <expr>
-    // ─────────────────────────────────────────────────────────────────────────
+    // ── say <expr> ────────────────────────────────────────────────────────────
     private PrintInstruction parseSay() {
         consume(TokenType.SAY);
         Expression expr = parseExpression();
@@ -69,133 +68,109 @@ public class Parser {
         return new PrintInstruction(expr);
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
-    //  if <expr> is greater than <expr> then
-    //      <body>
-    //
-    //  The body is every indented line that follows.
-    //  We use a simple rule: lines after "then" that start with whitespace,
-    //  OR we collect until we see a non-indented keyword or EOF.
-    //  Actually — since we're working with tokens and newlines, we collect
-    //  until we hit a top-level keyword (LET/SAY/IF/REPEAT) or EOF.
-    // ─────────────────────────────────────────────────────────────────────────
+    // ── if <left> is greater than <right> then  /  if <left> > <right> then ──
     private IfInstruction parseIf() {
         consume(TokenType.IF);
         Expression left = parseExpression();
+        Expression condition;
 
-        // "is greater than"
-        consume(TokenType.IS);
-        consume(TokenType.GREATER);
-        consume(TokenType.THAN);
-
-        Expression right = parseExpression();
-        Expression condition = new BinaryOpNode(left, ">", right);
+        if (check(TokenType.IS)) {
+            consume(TokenType.IS);
+            consume(TokenType.GREATER);
+            consume(TokenType.THAN);
+            Expression right = parseExpression();
+            condition = new BinaryOpNode(left, ">", right);
+        } else if (check(TokenType.GREATER_THAN)) {
+            advance();
+            Expression right = parseExpression();
+            condition = new BinaryOpNode(left, ">", right);
+        } else if (check(TokenType.LESS_THAN)) {
+            advance();
+            Expression right = parseExpression();
+            condition = new BinaryOpNode(left, "<", right);
+        } else if (check(TokenType.EQUALS_EQUALS)) {
+            advance();
+            Expression right = parseExpression();
+            condition = new BinaryOpNode(left, "==", right);
+        } else {
+            Token t = peek();
+            throw new RuntimeException(
+                "Expected comparison operator after expression on line " + t.getLine() +
+                ", but found: '" + t.getValue() + "'");
+        }
 
         consume(TokenType.THEN);
         expectNewlineOrEOF();
-
         List<Instruction> body = parseBody();
         return new IfInstruction(condition, body);
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
-    //  repeat <number> times
-    //      <body>
-    // ─────────────────────────────────────────────────────────────────────────
+    // ── repeat <n> times ──────────────────────────────────────────────────────
     private RepeatInstruction parseRepeat() {
         consume(TokenType.REPEAT);
         Token countToken = consume(TokenType.NUMBER);
         int count = (int) Double.parseDouble(countToken.getValue());
         consume(TokenType.TIMES);
         expectNewlineOrEOF();
-
         List<Instruction> body = parseBody();
         return new RepeatInstruction(count, body);
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
-    //  Parse the indented body of an if/repeat block.
-    //  We read instructions until we see a top-level keyword or EOF.
-    //  Top-level keywords are LET, SAY, IF, REPEAT.
-    // ─────────────────────────────────────────────────────────────────────────
+    /**
+     * Parse the indented body of an if/repeat block.
+     *
+     * Strategy (using INDENT/DEDENT tokens):
+     *  - Expect an INDENT token.
+     *  - Collect instructions until DEDENT or EOF.
+     *  - Consume DEDENT token.
+     */
     private List<Instruction> parseBody() {
         List<Instruction> body = new ArrayList<>();
 
         skipNewlines();
-
         if (isAtEnd()) return body;
 
-        int startLine = peek().getLine();  // line where body starts
+        if (check(TokenType.INDENT)) {
+            consume(TokenType.INDENT);
+            while (!isAtEnd() && !check(TokenType.DEDENT)) {
+                skipNewlines();
+                if (isAtEnd() || check(TokenType.DEDENT)) break;
 
-        while (!isAtEnd()) {
-
-            Token t = peek();
-
-            // STOP if we go back to same or earlier line (block ended)
-            if (t.getLine() < startLine) break;
-
-            // Also stop if new top-level instruction starts on new line
-            if ((t.getType() == TokenType.LET ||
-                t.getType() == TokenType.IF ||
-                t.getType() == TokenType.REPEAT) &&
-                t.getLine() == startLine) {
-                break;
+                Instruction instr = parseInstruction();
+                if (instr != null) body.add(instr);
             }
-
-
-            body.add(parseInstruction());
-            skipNewlines();
+            if (check(TokenType.DEDENT)) consume(TokenType.DEDENT);
         }
 
         return body;
     }
 
-    // A token is a "body" token if it's one of our statement starters
-    private boolean isBodyToken(Token t) {
-        switch (t.getType()) {
-            case LET:
-            case SAY:
-            case IF:
-            case REPEAT:
-                return true;
-            default:
-                return false;
-        }
-    }
 
-    // ─────────────────────────────────────────────────────────────────────────
-    //  Expression parsing — 3-level chain enforces operator precedence:
-    //
-    //  parseExpression  →  handles + and -  (lowest priority)
-    //  parseTerm        →  handles * and /  (higher priority)
-    //  parsePrimary     →  handles a single value (highest priority)
-    //
-    //  Because parseTerm is called BEFORE + or - are checked,
-    //  * and / always bind tighter.
-    // ─────────────────────────────────────────────────────────────────────────
+    // ── Expression parsing (three-level precedence) ───────────────────────────
 
+    /** Handles + and - (lowest precedence). */
     private Expression parseExpression() {
-        Expression expr = parseTerm();   // get left side (may consume * and /)
-
+        Expression expr = parseTerm();
         while (check(TokenType.PLUS) || check(TokenType.MINUS)) {
-            String op = advance().getValue();   // eat + or -
+            String op = advance().getValue();
             Expression right = parseTerm();
             expr = new BinaryOpNode(expr, op, right);
         }
         return expr;
     }
 
+    /** Handles * and / (higher than + and -). */
     private Expression parseTerm() {
-        Expression expr = parsePrimary();   // get left side
-
+        Expression expr = parsePrimary();
         while (check(TokenType.STAR) || check(TokenType.SLASH)) {
-            String op = advance().getValue();   // eat * or /
+            String op = advance().getValue();
             Expression right = parsePrimary();
             expr = new BinaryOpNode(expr, op, right);
         }
         return expr;
     }
 
+    /** Handles a single literal or variable (highest precedence). */
     private Expression parsePrimary() {
         Token t = peek();
 
@@ -203,68 +178,40 @@ public class Parser {
             advance();
             return new NumberNode(Double.parseDouble(t.getValue()));
         }
-
         if (t.getType() == TokenType.STRING) {
             advance();
             return new StringNode(t.getValue());
         }
-
         if (t.getType() == TokenType.IDENTIFIER) {
             advance();
             return new VariableNode(t.getValue());
         }
 
         throw new RuntimeException(
-            "Expected a number, string, or variable — but got '" +
-            t.getValue() + "' on line " + t.getLine());
+            "Expected a number, string, or variable name, " +
+            "but found '" + t.getValue() + "' on line " + t.getLine());
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
-    //  Utility helpers
-    // ─────────────────────────────────────────────────────────────────────────
+    // ── Utility helpers ───────────────────────────────────────────────────────
 
-    /** Return the current token without consuming it. */
-    private Token peek() {
-        return tokens.get(current);
-    }
+    private Token peek()              { return tokens.get(current); }
+    private Token advance()           { return tokens.get(current++); }
+    private boolean check(TokenType t){ return !isAtEnd() && peek().getType() == t; }
+    private boolean isAtEnd()         { return peek().getType() == TokenType.EOF; }
 
-    /** Consume and return the current token. */
-    private Token advance() {
-        Token t = tokens.get(current);
-        current++;
-        return t;
-    }
-
-    /** Check if the current token has the given type (without consuming). */
-    private boolean check(TokenType type) {
-        return !isAtEnd() && peek().getType() == type;
-    }
-
-    /** Consume the current token — throw a helpful error if it's the wrong type. */
     private Token consume(TokenType expected) {
         if (check(expected)) return advance();
         Token t = peek();
         throw new RuntimeException(
-            "Expected " + expected + " but got '" + t.getValue() +
+            "Expected " + expected + " but found '" + t.getValue() +
             "' (type " + t.getType() + ") on line " + t.getLine());
     }
 
-    /** Skip over any NEWLINE tokens. */
     private void skipNewlines() {
         while (check(TokenType.NEWLINE)) advance();
     }
 
-    /** After a statement, we expect a NEWLINE or EOF. */
     private void expectNewlineOrEOF() {
-        if (check(TokenType.NEWLINE)) {
-            advance();
-        } else if (!isAtEnd()) {
-            // tolerate missing newline at end of file
-        }
-    }
-
-    /** Are we at the end of the token list? */
-    private boolean isAtEnd() {
-        return peek().getType() == TokenType.EOF;
+        if (check(TokenType.NEWLINE)) advance();
     }
 }

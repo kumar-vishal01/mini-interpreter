@@ -1,0 +1,6 @@
+let x be 10
+let i be 1
+repeat 3 times
+    if x is greater than 5 then
+        say i
+    let i be i + 1

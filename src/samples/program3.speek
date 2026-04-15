@@ -1,0 +1,3 @@
+let score be 85
+if score is greater than 50 then
+    say "Pass"

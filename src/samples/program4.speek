@@ -1,0 +1,4 @@
+let i be 1
+repeat 4 times
+    say i
+    let i be i + 1

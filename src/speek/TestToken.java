@@ -1,31 +1,26 @@
 package speek;
-import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Paths;
+
 import java.util.List;
 
+/**
+ * TestToken — quick manual test for the Tokenizer.
+ */
 public class TestToken {
-    public static void main(String[] args) throws Exception {
-        // A small Speek program covering various token types
+
+    public static void main(String[] args) {
         String code = "let x be 10\n"
-                     + "let name be \"hello\"\n"
-                     + "say x + 5\n"
-                     + "if x > 3 then\n"
-                     + "  say x - 1\n"
-                     + "repeat 3 times\n"
-                     + "  say x * 2 / 1\n"
-                     + "if x == 10 then\n"
-                     + "  say \"done\"\n";
+                    + "let name be \"hello\"\n"
+                    + "say x + 5\n"
+                    + "if x is greater than 3 then\n"
+                    + "    say x - 1\n"
+                    + "repeat 3 times\n"
+                    + "    say x * 2 / 1\n"
+                    + "if x == 10 then\n"
+                    + "    say \"done\"\n";
 
-
-        String code1 = new String(Files.readAllBytes(Paths.get("src/samples/program2.speek")));
-
-        Tokenizer tokenizer = new Tokenizer(code1);
+        Tokenizer tokenizer = new Tokenizer(code);
         List<Token> tokens = tokenizer.tokenize();
 
-        // System.out.println("List of Tokens :\n"+tokens);
-
-        // Print the full list of tokens
         System.out.println("=== Token List ===");
         for (int i = 0; i < tokens.size(); i++) {
             System.out.println("[" + i + "] " + tokens.get(i));

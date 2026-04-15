@@ -2,133 +2,145 @@ package speek;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Stack;
 
+/**
+ * Tokenizer — reads SPEEK source code character by character and produces
+ * a flat List<Token>. The last token is always EOF.
+ *
+ * Modified to support INDENT and DEDENT tokens.
+ */
 public class Tokenizer {
     private final String source;
-    private int pos;        // current position in source
-    private int line;       // current line number (for error messages)
+    private int pos;
+    private int line;
+    private Stack<Integer> indentStack;
 
     public Tokenizer(String source) {
         this.source = source;
-        this.pos = 0;
-        this.line = 1;
+        this.pos    = 0;
+        this.line   = 1;
+        this.indentStack = new Stack<>();
+        this.indentStack.push(0);
     }
 
     public List<Token> tokenize() {
         List<Token> tokens = new ArrayList<>();
+        boolean atLineStart = true;
 
         while (pos < source.length()) {
-            char c = source.charAt(pos);
+            if (atLineStart) {
+                int spaces = 0;
+                while (pos < source.length() && (source.charAt(pos) == ' ' || source.charAt(pos) == '\t')) {
+                    if (source.charAt(pos) == '\t') spaces += 4;
+                    else spaces += 1;
+                    pos++;
+                }
 
-            // --- Skip spaces and tabs (but NOT newlines) ---
-            if (c == ' ' || c == '\t' || c == '\r') {
-                pos++;
-                continue;
+                if (pos < source.length() && (source.charAt(pos) == '\n' || source.charAt(pos) == '\r')) {
+                    // Blank line, ignore indentation
+                    atLineStart = false; // It will hit \n or \r in the main loop
+                    continue;
+                }
+
+                if (pos >= source.length()) break;
+
+                if (spaces > indentStack.peek()) {
+                    indentStack.push(spaces);
+                    tokens.add(new Token(TokenType.INDENT, "", line));
+                } else if (spaces < indentStack.peek()) {
+                    while (!indentStack.isEmpty() && spaces < indentStack.peek()) {
+                        indentStack.pop();
+                        tokens.add(new Token(TokenType.DEDENT, "", line));
+                    }
+                    if (indentStack.isEmpty() || spaces != indentStack.peek()) {
+                        System.err.println("Warning: Indentation error on line " + line);
+                    }
+                }
+                atLineStart = false;
             }
 
-            // --- Newline ---
+            char c = source.charAt(pos);
+
+            if (c == ' ' || c == '\t' || c == '\r') { pos++; continue; }
+
             if (c == '\n') {
-                // Only add NEWLINE if the last token wasn't also a NEWLINE
-                // (avoids blank-line noise)
-                if (!tokens.isEmpty() && tokens.get(tokens.size() - 1).getType() != TokenType.NEWLINE) {
+                if (!tokens.isEmpty() &&
+                    tokens.get(tokens.size() - 1).getType() != TokenType.NEWLINE) {
                     tokens.add(new Token(TokenType.NEWLINE, "\\n", line));
                 }
                 line++;
                 pos++;
+                atLineStart = true;
                 continue;
             }
 
-            // --- Single-character operators ---
             if (c == '+') { tokens.add(new Token(TokenType.PLUS,  "+", line)); pos++; continue; }
             if (c == '-') { tokens.add(new Token(TokenType.MINUS, "-", line)); pos++; continue; }
             if (c == '*') { tokens.add(new Token(TokenType.STAR,  "*", line)); pos++; continue; }
             if (c == '/') { tokens.add(new Token(TokenType.SLASH, "/", line)); pos++; continue; }
+
             if (c == '>') { tokens.add(new Token(TokenType.GREATER_THAN, ">", line)); pos++; continue; }
             if (c == '<') { tokens.add(new Token(TokenType.LESS_THAN,    "<", line)); pos++; continue; }
 
-            // --- == operator ---
             if (c == '=' && pos + 1 < source.length() && source.charAt(pos + 1) == '=') {
                 tokens.add(new Token(TokenType.EQUALS_EQUALS, "==", line));
                 pos += 2;
                 continue;
             }
 
-            // --- String literal: "hello" ---
-            if (c == '"') {
-                tokens.add(readString());
-                continue;
-            }
+            if (c == '"') { tokens.add(readString()); continue; }
+            if (Character.isDigit(c)) { tokens.add(readNumber()); continue; }
+            if (Character.isLetter(c) || c == '_') { tokens.add(readWord()); continue; }
 
-            // --- Number literal: 10, 3.14 ---
-            if (Character.isDigit(c)) {
-                tokens.add(readNumber());
-                continue;
-            }
-
-            // --- Keyword or identifier ---
-            if (Character.isLetter(c) || c == '_') {
-                tokens.add(readWord());
-                continue;
-            }
-
-            // --- Unknown character: skip with warning ---
             System.err.println("Warning: unknown character '" + c + "' on line " + line + " — skipping.");
             pos++;
         }
 
-        // Always end with EOF
+        while (indentStack.size() > 1) {
+            indentStack.pop();
+            tokens.add(new Token(TokenType.DEDENT, "", line));
+        }
+
         tokens.add(new Token(TokenType.EOF, "", line));
         return tokens;
     }
 
-    // -------------------------------------------------------------------------
-    // Helper: read a quoted string token
-    // -------------------------------------------------------------------------
     private Token readString() {
         int startLine = line;
-        pos++; // skip opening "
+        pos++;
         StringBuilder sb = new StringBuilder();
         while (pos < source.length() && source.charAt(pos) != '"') {
             sb.append(source.charAt(pos));
             pos++;
         }
-        pos++; // skip closing "
+        if (pos < source.length()) pos++;
         return new Token(TokenType.STRING, sb.toString(), startLine);
     }
 
-    // -------------------------------------------------------------------------
-    // Helper: read a number token (integer or decimal)
-    // -------------------------------------------------------------------------
     private Token readNumber() {
         int startLine = line;
         StringBuilder sb = new StringBuilder();
-        while (pos < source.length() && (Character.isDigit(source.charAt(pos)) || source.charAt(pos) == '.')) {
+        while (pos < source.length() &&
+               (Character.isDigit(source.charAt(pos)) || source.charAt(pos) == '.')) {
             sb.append(source.charAt(pos));
             pos++;
         }
         return new Token(TokenType.NUMBER, sb.toString(), startLine);
     }
 
-    // -------------------------------------------------------------------------
-    // Helper: read a keyword or identifier
-    // SPEEK multi-word keyword: "is greater than" (3 separate tokens that the
-    // Parser will combine). We tokenize each word individually.
-    // -------------------------------------------------------------------------
     private Token readWord() {
         int startLine = line;
         StringBuilder sb = new StringBuilder();
-        while (pos < source.length() && (Character.isLetterOrDigit(source.charAt(pos)) || source.charAt(pos) == '_')) {
+        while (pos < source.length() &&
+               (Character.isLetterOrDigit(source.charAt(pos)) || source.charAt(pos) == '_')) {
             sb.append(source.charAt(pos));
             pos++;
         }
         String word = sb.toString();
-        TokenType type = keyword(word);
-        return new Token(type, word, startLine);
+        return new Token(keyword(word), word, startLine);
     }
 
-    // -------------------------------------------------------------------------
-    // Map a word to its keyword type, or IDENTIFIER if it isn't a keyword
-    // -------------------------------------------------------------------------
     private TokenType keyword(String word) {
         switch (word) {
             case "let":     return TokenType.LET;

@@ -1,202 +1,186 @@
 # SPEEK Interpreter
-**Advanced OOP in Java — Sitare University Group Project**
 
-A working interpreter for the SPEEK scripting language, built entirely in pure Java.
-Write SPEEK code → run the interpreter → see real output on your terminal.
+**Simple Plain English Execution Kit** — a mini scripting language interpreter built in pure Java.
 
 ---
 
-## Quick Start
-
-```bash
-cd speek/
-mkdir out
-javac -d out src/speek/*.java
-java -cp out speek.Main samples/program1.speek
-```
-
----
-
-## File Structure
+## Project Structure
 
 ```
-speek/
+speek_Project v3/
 ├── src/
-│   └── speek/
-│       ├── TokenType.java       ← enum of all token types
-│       ├── Token.java           ← immutable token object (type + value + line)
-│       ├── Tokenizer.java       ← Stage 1: text → List<Token>
-│       ├── Expression.java      ← interface: evaluate(Environment env)
-│       ├── Nodes.java           ← NumberNode, StringNode, VariableNode, BinaryOpNode
-│       ├── Environment.java     ← variable store: HashMap<String, Object>
-│       ├── Instructions.java    ← Instruction interface + 4 instruction classes
-│       ├── Parser.java          ← Stage 2: List<Token> → List<Instruction>
-│       ├── Interpreter.java     ← orchestrates all 3 stages
-│       └── Main.java            ← entry point, reads .speek file
-├── samples/
-│   ├── program1.speek           ← arithmetic  → output: 16
-│   ├── program2.speek           ← strings     → output: Sitare / Hello from SPEEK
-│   ├── program3.speek           ← conditional → output: Pass
-│   └── program4.speek           ← loop        → output: 1 2 3 4
-├── out/                         ← created by javac (do not commit)
+│   ├── speek/
+│   │   ├── TokenType.java          # Enum of all token types
+│   │   ├── Token.java              # Immutable token (type, value, line)
+│   │   ├── Expression.java         # Interface: evaluate(env) → Object
+│   │   ├── NumberNode.java         # Literal number expression
+│   │   ├── StringNode.java         # Literal string expression
+│   │   ├── VariableNode.java       # Variable reference expression
+│   │   ├── BinaryOpNode.java       # left OP right expression
+│   │   ├── Environment.java        # Variable store (name → value map)
+│   │   ├── Instruction.java        # Interface: execute(env)
+│   │   ├── AssignInstruction.java  # let x be <expr>
+│   │   ├── PrintInstruction.java   # say <expr>
+│   │   ├── IfInstruction.java      # if <cond> then <body>
+│   │   ├── RepeatInstruction.java  # repeat <n> times <body>
+│   │   ├── Tokenizer.java          # Source → List<Token>
+│   │   ├── Parser.java             # List<Token> → List<Instruction>
+│   │   ├── Interpreter.java        # Runs the full pipeline
+│   │   ├── Main.java               # CLI entry point
+│   │   ├── TestToken.java          # Manual tokenizer test
+│   │   ├── TestParser.java         # Manual parser test
+│   │   └── TestInterpreter.java    # Runs all 4 sample programs
+│   └── samples/
+│       ├── program1.speek          # Arithmetic
+│       ├── program2.speek          # Strings
+│       ├── program3.speek          # Conditional
+│       ├── program4.speek          # Loop
+│       └── program5_nested.speek   # Nested blocks (extension)
+├── compile.sh                      # Compile all sources
 └── README.md
 ```
 
 ---
 
-## How to Run
+## The SPEEK Language
 
-### Windows
+### Syntax
 
-**Step 1 — Install Java**
-- Download JDK 11+ from https://adoptium.net
-- Run the installer — make sure "Add to PATH" is checked
-- Open Command Prompt and verify:
-```
-java -version
-javac -version
-```
+| Construct         | Syntax                                 |
+|-------------------|----------------------------------------|
+| Assign variable   | `let x be 10`                          |
+| Print value       | `say x`                                |
+| Conditional       | `if x is greater than 5 then`          |
+| Symbolic compare  | `if x > 5 then` / `if x < 5 then` / `if x == 5 then` |
+| Loop              | `repeat 3 times`                       |
+| Number literal    | `42` or `3.14`                         |
+| String literal    | `"hello world"`                        |
+| Arithmetic        | `x + y * 2 - z / 1`                   |
 
-**Step 2 — Compile**
-```
-cd C:\Users\YourName\speek
-mkdir out
-javac -d out src\speek\*.java
-```
+### Block Indentation
 
-**Step 3 — Run**
+Bodies of `if` and `repeat` blocks are indicated by **indentation** (any whitespace indent). The interpreter detects blocks using line numbers — indented lines after a header belong to that block's body.
+
+Nested blocks are fully supported:
 ```
-java -cp out speek.Main samples\program1.speek
-java -cp out speek.Main samples\program2.speek
-java -cp out speek.Main samples\program3.speek
-java -cp out speek.Main samples\program4.speek
+repeat 3 times
+    if x is greater than 5 then
+        say x
+    let x be x - 1
 ```
 
 ---
 
-### macOS
+## How the Interpreter Works
 
-**Step 1 — Install Java**
-```bash
-# Check if Java is already installed
-java -version
+The interpreter is a three-step pipeline:
 
-# If not installed, download from https://adoptium.net
-# Or use Homebrew:
-brew install openjdk@17
+```
+Source Code (String)
+       │
+       ▼
+  [Tokenizer]  →  List<Token>
+       │
+       ▼
+   [Parser]   →  List<Instruction>
+       │
+       ▼
+ [Interpreter] → Output
 ```
 
-**Step 2 — Compile**
+**Step 1 — Tokenizer** (`Tokenizer.java`): Reads source character by character, recognises patterns, and emits a `Token` for each one. The last token is always `EOF`.
+
+**Step 2 — Parser** (`Parser.java`): Reads tokens and builds a list of `Instruction` objects. Operator precedence is handled by the three-level chain:
+- `parseExpression()` — handles `+` and `-` (lowest priority)
+- `parseTerm()` — handles `*` and `/` (higher priority)
+- `parsePrimary()` — handles a single number, string, or variable
+
+**Step 3 — Execution**: Each `Instruction` is executed in order using a shared `Environment` (variable store).
+
+---
+
+## Sample Programs & Expected Output
+
+### Program 1 — Arithmetic
+```
+let x be 10
+let y be 3
+let result be x + y * 2
+say result
+```
+**Output:** `16`
+
+### Program 2 — Strings
+```
+let name be "Sitare"
+say name
+say "Hello from SPEEK"
+```
+**Output:**
+```
+Sitare
+Hello from SPEEK
+```
+
+### Program 3 — Conditional
+```
+let score be 85
+if score is greater than 50 then
+    say "Pass"
+```
+**Output:** `Pass`
+
+### Program 4 — Loop
+```
+let i be 1
+repeat 4 times
+    say i
+    let i be i + 1
+```
+**Output:**
+```
+1
+2
+3
+4
+```
+
+---
+
+## How to Compile and Run
+
+### Compile
+
 ```bash
-cd ~/Desktop/speek
-mkdir out
+# From the project root
 javac -d out src/speek/*.java
 ```
 
-**Step 3 — Run**
+Or use the provided script:
 ```bash
-java -cp out speek.Main samples/program1.speek
+bash compile.sh
 ```
 
----
+### Run a .speek file
 
-### Linux (Ubuntu / Debian)
-
-**Step 1 — Install Java**
 ```bash
-sudo apt update
-sudo apt install default-jdk
-java -version
-javac -version
+java -cp out speek.Main src/samples/program1.speek
 ```
 
-For Fedora / RHEL:
+### Run the test suite
+
 ```bash
-sudo dnf install java-11-openjdk-devel
+java -cp out speek.TestInterpreter
 ```
 
-**Step 2 — Compile**
+### Run tokenizer / parser tests
+
 ```bash
-cd ~/speek
-mkdir out
-javac -d out src/speek/*.java
-```
-
-**Step 3 — Run**
-```bash
-java -cp out speek.Main samples/program1.speek
+java -cp out speek.TestToken
+java -cp out speek.TestParser
 ```
 
 ---
 
-### IntelliJ IDEA (any OS)
 
-1. File → Open → select the `speek/` folder
-2. Right-click `src/speek/` → Mark Directory as → Sources Root
-3. Right-click `Main.java` → Run 'Main.main()'
-4. When prompted for a program argument, enter: `samples/program1.speek`
-
----
-
-### VS Code (any OS)
-
-1. Install the **Extension Pack for Java** from the marketplace
-2. Open the `speek/` folder
-3. Open `Main.java` and click the Run ▶ button
-4. To pass the file path, edit `.vscode/launch.json`:
-```json
-"args": ["samples/program1.speek"]
-```
-
----
-
-## Sample Programs
-
-| File | Code | Output |
-|------|------|--------|
-| program1.speek | `let x be 10` / `let y be 3` / `let result be x + y * 2` / `say result` | `16` |
-| program2.speek | `let name be "Sitare"` / `say name` / `say "Hello from SPEEK"` | `Sitare` / `Hello from SPEEK` |
-| program3.speek | `let score be 85` / `if score is greater than 50 then` / `say "Pass"` | `Pass` |
-| program4.speek | `let i be 1` / `repeat 4 times` / `say i` / `let i be i + 1` | `1` `2` `3` `4` |
-
----
-
-## Pipeline
-
-```
-Source code (.speek file)
-        ↓
-  [ Tokenizer ]  →  List<Token>
-        ↓
-   [ Parser ]    →  List<Instruction>
-        ↓
-  [ Evaluator ]  →  output printed to terminal
-```
-
-- **Stage 1 — Tokenizer:** Reads raw text character by character, emits a flat list of labelled tokens. Whitespace is discarded. Ends with EOF.
-- **Stage 2 — Parser:** Reads tokens, builds an instruction tree. Operator precedence is handled by three chained methods: `parseExpression()` → `parseTerm()` → `parsePrimary()`.
-- **Stage 3 — Evaluator:** Walks the instruction list, executes each one. All instructions share one `Environment` (the variable store).
-
----
-
-## Common Errors
-
-| Error | Fix |
-|-------|-----|
-| `javac: command not found` | Java not installed. Install JDK (not JRE) and restart terminal. |
-| `error: package speek does not exist` | You're not in the `speek/` folder. Run `cd speek/` first. |
-| `Variable not defined: x` | Used a variable before assigning it. Check your `let` statements. |
-| `Expected BE but got '...'` | Syntax error. Check your SPEEK code matches the language spec. |
-| `Could not read file: ...` | Wrong path to .speek file. Check for typos. |
-| `Cannot find or load main class speek.Main` | Missing `-cp out` flag or `out/` doesn't exist. Run `javac` first. |
-
----
-
-## Team Roles
-
-| Member | Files |
-|--------|-------|
-| Member 1 — Tokenizer | `TokenType.java`, `Token.java`, `Tokenizer.java` |
-| Member 2 — Data structures | `Expression.java`, `Nodes.java`, `Environment.java`, `Instructions.java` |
-| Member 3 — Parser + entry point | `Parser.java`, `Interpreter.java`, `Main.java` |
 

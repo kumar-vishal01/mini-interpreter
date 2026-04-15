@@ -182,5 +182,32 @@ java -cp out speek.TestParser
 
 ---
 
+## Extension: Nested Blocks
 
+Nested `if` inside `repeat` (and vice versa) is supported. Indentation determines which instructions belong to which block. Example (`program5_nested.speek`):
 
+```
+let x be 10
+let i be 1
+repeat 3 times
+    if x is greater than 5 then
+        say i
+    let i be i + 1
+```
+
+**Output:**
+```
+1
+2
+3
+```
+
+---
+
+## Design Decisions
+
+- **One class per file**: Every interface and class lives in its own `.java` file, following standard Java conventions.
+- **Immutability**: `Token` fields are `final`; no setters.
+- **Operator precedence via call chain**: `parseTerm` is called inside `parseExpression`, so `*` and `/` always bind tighter than `+` and `-` — no precedence table needed.
+- **Indent detection via line numbers**: The tokenizer records line numbers on every token. The parser uses these to determine block membership without requiring an explicit `end` keyword.
+- **Clean separation of concerns**: `Tokenizer` only lexes, `Parser` only parses, `Instruction`/`Expression` classes only execute/evaluate.
